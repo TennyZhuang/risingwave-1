@@ -17,7 +17,6 @@ use paste::paste;
 use super::*;
 use crate::optimizer::property::{Distribution, Order};
 use crate::utils::ColIndexMapping;
-use crate::{for_batch_plan_nodes, for_logical_plan_nodes, for_stream_plan_nodes};
 
 /// `ToStream` converts a logical plan node to streaming physical node
 /// with an optional required distribution.
@@ -106,6 +105,7 @@ macro_rules! impl_to_batch {
         }
     }
 }
+
 for_batch_plan_nodes! { impl_to_batch }
 for_stream_plan_nodes! { impl_to_batch }
 
@@ -140,5 +140,6 @@ macro_rules! ban_to_distributed {
         }
     }
 }
+
 for_logical_plan_nodes! { ban_to_distributed }
 for_stream_plan_nodes! { ban_to_distributed }

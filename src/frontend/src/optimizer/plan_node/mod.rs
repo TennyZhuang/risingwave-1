@@ -195,6 +195,170 @@ impl dyn PlanNode {
     }
 }
 
+/// [`for_all_plan_nodes`] includes all plan nodes. If you added a new plan node
+/// inside the project, be sure to add here and in its conventions like [`for_logical_plan_nodes`]
+///
+/// Every tuple has two elements, where `{ convention, name }`
+/// You can use it as follows
+/// ```rust
+/// macro_rules! use_plan {
+///     ([], $({ $convention:ident, $name:ident }),*) => {};
+/// }
+/// risingwave_frontend::for_all_plan_nodes! { use_plan }
+/// ```
+/// See the following implementations for example.
+#[macro_export]
+macro_rules! for_all_plan_nodes {
+    ($macro:ident $(, $x:tt)*) => {
+        $macro! {
+            [$($x),*]
+            ,{ Logical, Agg }
+            ,{ Logical, Apply }
+            ,{ Logical, Filter }
+            ,{ Logical, Project }
+            ,{ Logical, Scan }
+            ,{ Logical, Source }
+            ,{ Logical, Insert }
+            ,{ Logical, Delete }
+            ,{ Logical, Join }
+            ,{ Logical, Values }
+            ,{ Logical, Limit }
+            ,{ Logical, TopN }
+            // ,{ Logical, Sort } we don't need a LogicalSort, just require the Order
+            ,{ Batch, SimpleAgg }
+            ,{ Batch, HashAgg }
+            ,{ Batch, Project }
+            ,{ Batch, Filter }
+            ,{ Batch, Insert }
+            ,{ Batch, Delete }
+            ,{ Batch, SeqScan }
+            ,{ Batch, HashJoin }
+            ,{ Batch, Values }
+            ,{ Batch, Sort }
+            ,{ Batch, Exchange }
+            ,{ Batch, Limit }
+            ,{ Stream, Project }
+            ,{ Stream, Filter }
+            ,{ Stream, TableScan }
+            ,{ Stream, Source }
+            ,{ Stream, HashJoin }
+            ,{ Stream, Exchange }
+            ,{ Stream, HashAgg }
+            ,{ Stream, SimpleAgg }
+            ,{ Stream, Materialize }
+        }
+    };
+}
+
+macro_rules! for_convention {
+    ($convention:ident) => {
+        paste! {
+            macro_rules! [<for_ $convention:snake>] {
+                (
+                    $$macro:ident,
+                    [$$(,{ $$convention_out:ident, $$name_out:ident })*],
+                    [],
+                ) => {
+                    $$macro! {
+                        $$(,{ $$convention_out, $$name_out })*
+                    }
+                };
+                (
+                    $$macro:ident,
+                    [$$(,{ $$convention_out:ident, $$name_out:ident })*],
+                    [,{ $convention, $$name: ident } $$(,{ $$convention_rest:ident, $$name_rest:ident })*],
+                ) => {
+                    [<for_ $convention:snake>]! {
+                        $$macro,
+                        [,{ $convention, $$name } $$(,{ $$convention_out, $$name_out })*],
+                        [$$(,{ $$convention_rest, $$name_rest })*],
+                    }
+                };
+                (
+                    $$macro: ident,
+                    [$$(,{ $$convention_out:ident, $$name_out:ident })*],
+                    [,{ $$convention:ident, $name:ident } $$(,{ $$convention_rest:ident, $$name_rest:ident })*],
+                ) => {
+                    [<for_ $convention:snake>]! {
+                        $$macro,
+                        [$$(,{ $$convention_out, $$name_out })*],
+                        [$$(,{ $$convention_rest, $$name_rest })*],
+                    }
+                };
+            }
+        }
+    };
+}
+
+macro_rules! def_logical_macro {
+    ($(,{ $convention_out:ident, $name_out:ident })*) => {
+        macro_rules! for_logical_plan_nodes {
+            ($$macro:ident $$(, $$x:tt)*) => {
+                $$macro! {
+                    [$$($$x),*]
+                    $(,{ $convention_out, $name_out })*
+                }
+            };
+        }
+    };
+}
+
+for_convention! {Logical}
+
+macro_rules! def_logical {
+    ([], $({ $convention:ident, $name:ident }),*) => {
+        for_logical! {def_logical_macro, [], [$(,{ $convention,  $name })*],}
+    };
+}
+
+for_all_plan_nodes! { def_logical }
+
+macro_rules! def_batch_macro {
+    ($(,{ $convention_out:ident, $name_out:ident })*) => {
+        macro_rules! for_batch_plan_nodes {
+            ($$macro:ident $$(, $$x:tt)*) => {
+                $$macro! {
+                    [$$($$x),*]
+                    $(,{ $convention_out, $name_out })*
+                }
+            };
+        }
+    };
+}
+
+for_convention! {Batch}
+
+macro_rules! def_batch {
+    ([], $({ $convention:ident, $name:ident }),*) => {
+        for_batch! {def_batch_macro, [], [$(,{ $convention,  $name })*],}
+    };
+}
+
+for_all_plan_nodes! { def_batch }
+
+macro_rules! def_stream_macro {
+    ($(,{ $convention_out:ident, $name_out:ident })*) => {
+        macro_rules! for_stream_plan_nodes {
+            ($$macro:ident $$(, $$x:tt)*) => {
+                $$macro! {
+                    [$$($$x),*]
+                    $(,{ $convention_out, $name_out })*
+                }
+            };
+        }
+    };
+}
+
+for_convention! {Stream}
+
+macro_rules! def_stream {
+    ([], $({ $convention:ident, $name:ident }),*) => {
+        for_stream! {def_stream_macro, [], [$(,{ $convention,  $name })*],}
+    };
+}
+
+for_all_plan_nodes! { def_stream }
+
 mod plan_base;
 pub use plan_base::*;
 #[macro_use]
@@ -279,125 +443,6 @@ pub use stream_table_scan::StreamTableScan;
 
 use crate::session::OptimizerContextRef;
 
-/// [`for_all_plan_nodes`] includes all plan nodes. If you added a new plan node
-/// inside the project, be sure to add here and in its conventions like [`for_logical_plan_nodes`]
-///
-/// Every tuple has two elements, where `{ convention, name }`
-/// You can use it as follows
-/// ```rust
-/// macro_rules! use_plan {
-///     ([], $({ $convention:ident, $name:ident }),*) => {};
-/// }
-/// risingwave_frontend::for_all_plan_nodes! { use_plan }
-/// ```
-/// See the following implementations for example.
-#[macro_export]
-macro_rules! for_all_plan_nodes {
-    ($macro:ident $(, $x:tt)*) => {
-        $macro! {
-            [$($x),*]
-            ,{ Logical, Agg }
-            ,{ Logical, Apply }
-            ,{ Logical, Filter }
-            ,{ Logical, Project }
-            ,{ Logical, Scan }
-            ,{ Logical, Source }
-            ,{ Logical, Insert }
-            ,{ Logical, Delete }
-            ,{ Logical, Join }
-            ,{ Logical, Values }
-            ,{ Logical, Limit }
-            ,{ Logical, TopN }
-            // ,{ Logical, Sort } we don't need a LogicalSort, just require the Order
-            ,{ Batch, SimpleAgg }
-            ,{ Batch, HashAgg }
-            ,{ Batch, Project }
-            ,{ Batch, Filter }
-            ,{ Batch, Insert }
-            ,{ Batch, Delete }
-            ,{ Batch, SeqScan }
-            ,{ Batch, HashJoin }
-            ,{ Batch, Values }
-            ,{ Batch, Sort }
-            ,{ Batch, Exchange }
-            ,{ Batch, Limit }
-            ,{ Stream, Project }
-            ,{ Stream, Filter }
-            ,{ Stream, TableScan }
-            ,{ Stream, Source }
-            ,{ Stream, HashJoin }
-            ,{ Stream, Exchange }
-            ,{ Stream, HashAgg }
-            ,{ Stream, SimpleAgg }
-            ,{ Stream, Materialize }
-        }
-    };
-}
-/// `for_logical_plan_nodes` includes all plan nodes with logical convention.
-#[macro_export]
-macro_rules! for_logical_plan_nodes {
-    ($macro:ident $(, $x:tt)*) => {
-        $macro! {
-            [$($x),*]
-            ,{ Logical, Agg }
-            ,{ Logical, Apply }
-            ,{ Logical, Filter }
-            ,{ Logical, Project }
-            ,{ Logical, Scan }
-            ,{ Logical, Source }
-            ,{ Logical, Insert }
-            ,{ Logical, Delete }
-            ,{ Logical, Join }
-            ,{ Logical, Values }
-            ,{ Logical, Limit }
-            ,{ Logical, TopN }
-            // ,{ Logical, Sort} not sure if we will support Order by clause in subquery/view/MV
-            // if we dont support thatk, we don't need LogicalSort, just require the Order at the top of query
-        }
-    };
-}
-
-/// `for_batch_plan_nodes` includes all plan nodes with batch convention.
-#[macro_export]
-macro_rules! for_batch_plan_nodes {
-    ($macro:ident $(, $x:tt)*) => {
-        $macro! {
-            [$($x),*]
-            ,{ Batch, SimpleAgg }
-            ,{ Batch, HashAgg }
-            ,{ Batch, Project }
-            ,{ Batch, Filter }
-            ,{ Batch, SeqScan }
-            ,{ Batch, HashJoin }
-            ,{ Batch, Values }
-            ,{ Batch, Limit }
-            ,{ Batch, Sort }
-            ,{ Batch, Exchange }
-            ,{ Batch, Insert }
-            ,{ Batch, Delete }
-        }
-    };
-}
-
-/// `for_stream_plan_nodes` includes all plan nodes with stream convention.
-#[macro_export]
-macro_rules! for_stream_plan_nodes {
-    ($macro:ident $(, $x:tt)*) => {
-        $macro! {
-            [$($x),*]
-            ,{ Stream, Project }
-            ,{ Stream, Filter }
-            ,{ Stream, HashJoin }
-            ,{ Stream, Exchange }
-            ,{ Stream, TableScan }
-            ,{ Stream, Source }
-            ,{ Stream, HashAgg }
-            ,{ Stream, SimpleAgg }
-            ,{ Stream, Materialize }
-        }
-    };
-}
-
 /// impl [`PlanNodeType`] fn for each node.
 macro_rules! enum_plan_node_type {
     ([], $( { $convention:ident, $name:ident }),*) => {
@@ -422,6 +467,7 @@ macro_rules! enum_plan_node_type {
         }
     }
 }
+
 for_all_plan_nodes! { enum_plan_node_type }
 
 /// impl fn `plan_ref` for each node.
