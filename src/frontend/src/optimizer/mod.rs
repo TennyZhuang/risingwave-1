@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[macro_use]
 pub mod plan_node;
 pub use plan_node::PlanRef;
 pub mod property;

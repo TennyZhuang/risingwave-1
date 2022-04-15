@@ -17,7 +17,6 @@ use paste::paste;
 
 use super::*;
 pub use crate::expr::CollectInputRef;
-use crate::{for_batch_plan_nodes, for_stream_plan_nodes};
 
 /// The trait for column pruning, only logical plan node will use it, though all plan node impl it.
 pub trait ColPrunable {

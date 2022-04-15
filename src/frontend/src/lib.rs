@@ -30,6 +30,8 @@
 #![feature(proc_macro_hygiene, stmt_expr_attributes)]
 #![feature(let_else)]
 #![feature(trait_alias)]
+#![feature(macro_metavar_expr)]
+#![feature(trace_macros)]
 
 #[macro_use]
 pub mod catalog;
@@ -37,6 +39,7 @@ pub mod binder;
 pub mod expr;
 pub mod handler;
 pub mod observer;
+#[macro_use]
 pub mod optimizer;
 pub mod planner;
 mod scheduler;

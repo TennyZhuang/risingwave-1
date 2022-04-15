@@ -17,9 +17,7 @@ use risingwave_pb::plan::plan_node as pb_batch_node;
 use risingwave_pb::stream_plan::stream_node as pb_stream_node;
 
 use super::*;
-use crate::{
-    for_all_plan_nodes, for_batch_plan_nodes, for_logical_plan_nodes, for_stream_plan_nodes,
-};
+use crate::*;
 
 pub trait ToProst: ToBatchProst + ToStreamProst {}
 
@@ -56,8 +54,10 @@ macro_rules! ban_to_batch_prost {
         }
     }
 }
+
 for_logical_plan_nodes! { ban_to_batch_prost }
 for_stream_plan_nodes! { ban_to_batch_prost }
+
 /// impl a panic `ToStreamProst` for logical and batch node.
 macro_rules! ban_to_stream_prost {
     ([], $( { $convention:ident, $name:ident }),*) => {
@@ -70,5 +70,6 @@ macro_rules! ban_to_stream_prost {
         }
     }
 }
+
 for_logical_plan_nodes! { ban_to_stream_prost }
 for_batch_plan_nodes! { ban_to_stream_prost }

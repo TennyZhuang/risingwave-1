@@ -39,6 +39,7 @@ pub struct PlanBase {
     /// means the stream contains only insert operation.
     pub append_only: bool,
 }
+
 impl PlanBase {
     pub fn new_logical(ctx: OptimizerContextRef, schema: Schema, pk_indices: Vec<usize>) -> Self {
         let id = ctx.next_plan_node_id();
@@ -93,6 +94,7 @@ impl PlanBase {
         }
     }
 }
+
 macro_rules! impl_base_delegate {
     ([], $( { $convention:ident, $name:ident }),*) => {
         $(paste! {
@@ -100,7 +102,7 @@ macro_rules! impl_base_delegate {
                 pub fn id(&self) -> PlanNodeId {
                     self.plan_base().id
                 }
-                 pub fn ctx(&self) -> OptimizerContextRef {
+                pub fn ctx(&self) -> OptimizerContextRef {
                     self.plan_base().ctx.clone()
                 }
                 pub fn schema(&self) -> &Schema {
@@ -122,4 +124,5 @@ macro_rules! impl_base_delegate {
         })*
     }
 }
+
 for_all_plan_nodes! { impl_base_delegate }
