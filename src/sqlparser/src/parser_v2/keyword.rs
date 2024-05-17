@@ -1,71 +1,33 @@
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+use winnow::ascii::Caseless;
+use winnow::{PResult, Parser};
 
-//! This module defines
-//! 1) a list of constants for every keyword that
-//! can appear in [crate::tokenizer::Word::keyword]:
-//!    pub const KEYWORD = "KEYWORD"
-//! 2) an `ALL_KEYWORDS` array with every keyword in it
-//!     This is not a list of *reserved* keywords: some of these can be
-//!     parsed as identifiers if the parser decides so. This means that
-//!     new keywords can be added here without affecting the parse result.
-//!
-//!     As a matter of fact, most of these keywords are not used at all
-//!     and could be removed.
-//! 3) a `RESERVED_FOR_TABLE_ALIAS` array with keywords reserved in a
-//! "table alias" context.
-
-use core::fmt;
-
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
-
-/// Defines a string constant for a single keyword: `kw_def!(SELECT);`
-/// expands to `pub const SELECT = "SELECT";`
-macro_rules! kw_def {
-    ($ident:ident = $string_keyword:expr) => {
-        pub const $ident: &'static str = $string_keyword;
-    };
-    ($ident:ident) => {
-        kw_def!($ident = stringify!($ident));
-    };
-}
-
-/// Expands to a list of `kw_def!()` invocations for each keyword
-/// and defines an ALL_KEYWORDS array of the defined constants.
 macro_rules! define_keywords {
     ($(
-        $ident:ident $(= $string_keyword:expr)?
+        $ident:ident
     ),*) => {
         #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-        #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
         #[expect(non_camel_case_types, clippy::enum_variant_names)]
         pub enum Keyword {
             NoKeyword,
             $($ident),*
         }
 
-        pub const ALL_KEYWORDS_INDEX: &[Keyword] = &[
-            $(Keyword::$ident),*
-        ];
-
-        $(kw_def!($ident $(= $string_keyword)?);)*
-        pub const ALL_KEYWORDS: &[&str] = &[
-            $($ident),*
-        ];
+        paste::paste! {
+            impl Keyword {
+                $(
+                    fn [<parse_ $ident:lower>]<'s>(input: &mut &'s str) -> PResult<Keyword> {
+                        Caseless(stringify!($ident)).value(Keyword::$ident).parse_next(input)
+                    }
+                )*
+            }
+        }
     };
 }
 
-// The following keywords should be sorted to be able to match using binary search
+// fn select<'s>(input: &mut &'s str) -> PResult<Keyword> {
+//     Caseless("SELECT").value(Keyword::SELECT).parse_next(input)
+// }
+
 define_keywords!(
     ABORT,
     ABS,
@@ -211,7 +173,6 @@ define_keywords!(
     ENCODE,
     ENCRYPTED,
     END,
-    END_EXEC = "END-EXEC",
     END_FRAME,
     END_PARTITION,
     EQUALS,
@@ -581,187 +542,12 @@ define_keywords!(
     ZONE
 );
 
-/// These keywords can't be used as a table alias, so that `FROM table_name alias`
-/// can be parsed unambiguously without looking ahead.
-pub const RESERVED_FOR_TABLE_ALIAS: &[Keyword] = &[
-    // Reserved as both a table and a column alias:
-    Keyword::WITH,
-    Keyword::EXPLAIN,
-    Keyword::ANALYZE,
-    Keyword::SELECT,
-    Keyword::WHERE,
-    Keyword::GROUP,
-    Keyword::SORT,
-    Keyword::HAVING,
-    Keyword::ORDER,
-    Keyword::TOP,
-    Keyword::LATERAL,
-    Keyword::VIEW,
-    Keyword::LIMIT,
-    Keyword::OFFSET,
-    Keyword::FETCH,
-    Keyword::UNION,
-    Keyword::EXCEPT,
-    Keyword::INTERSECT,
-    // Reserved only as a table alias in the `FROM`/`JOIN` clauses:
-    Keyword::ON,
-    Keyword::JOIN,
-    Keyword::INNER,
-    Keyword::CROSS,
-    Keyword::FULL,
-    Keyword::LEFT,
-    Keyword::RIGHT,
-    Keyword::NATURAL,
-    Keyword::USING,
-    Keyword::CLUSTER,
-    // for MSSQL-specific OUTER APPLY (seems reserved in most dialects)
-    Keyword::OUTER,
-    Keyword::SET,
-    Keyword::RETURNING,
-    Keyword::EMIT,
-];
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-/// Can't be used as a column alias, so that `SELECT <expr> alias`
-/// can be parsed unambiguously without looking ahead.
-pub const RESERVED_FOR_COLUMN_ALIAS: &[Keyword] = &[
-    // Reserved as both a table and a column alias:
-    Keyword::WITH,
-    Keyword::EXPLAIN,
-    Keyword::ANALYZE,
-    Keyword::SELECT,
-    Keyword::WHERE,
-    Keyword::GROUP,
-    Keyword::SORT,
-    Keyword::HAVING,
-    Keyword::ORDER,
-    Keyword::TOP,
-    Keyword::LATERAL,
-    Keyword::VIEW,
-    Keyword::LIMIT,
-    Keyword::OFFSET,
-    Keyword::FETCH,
-    Keyword::UNION,
-    Keyword::EXCEPT,
-    Keyword::INTERSECT,
-    Keyword::CLUSTER,
-    // Reserved only as a column alias in the `SELECT` clause
-    Keyword::FROM,
-];
-
-/// Can't be used as a column or table name in PostgreSQL.
-///
-/// This list is taken from the following table, for all "reserved" words in the PostgreSQL column,
-/// including "can be function or type" and "requires AS". <https://www.postgresql.org/docs/14/sql-keywords-appendix.html#KEYWORDS-TABLE>
-///
-/// `SELECT` and `WITH` were commented out because the following won't parse:
-/// `SELECT (SELECT 1)` or `SELECT (WITH a AS (SELECT 1) SELECT 1)`
-///
-/// Other commented ones like `CURRENT_SCHEMA` are actually functions invoked without parentheses.
-pub const RESERVED_FOR_COLUMN_OR_TABLE_NAME: &[Keyword] = &[
-    Keyword::ALL,
-    Keyword::ANALYSE,
-    Keyword::ANALYZE,
-    Keyword::AND,
-    Keyword::ANY,
-    Keyword::ARRAY,
-    Keyword::AS,
-    Keyword::ASC,
-    Keyword::ASYMMETRIC,
-    Keyword::AUTHORIZATION,
-    Keyword::BINARY,
-    Keyword::BOTH,
-    Keyword::CASE,
-    Keyword::CAST,
-    Keyword::CHECK,
-    Keyword::COLLATE,
-    Keyword::COLLATION,
-    Keyword::COLUMN,
-    Keyword::CONCURRENTLY,
-    Keyword::CONSTRAINT,
-    Keyword::CREATE,
-    Keyword::CROSS,
-    // Keyword::CURRENT_CATALOG,
-    // Keyword::CURRENT_DATE,
-    // Keyword::CURRENT_ROLE,
-    // Keyword::CURRENT_SCHEMA,
-    // Keyword::CURRENT_TIME,
-    // Keyword::CURRENT_TIMESTAMP,
-    // Keyword::CURRENT_USER,
-    Keyword::DEFAULT,
-    Keyword::DEFERRABLE,
-    Keyword::DESC,
-    Keyword::DISTINCT,
-    Keyword::DO,
-    Keyword::ELSE,
-    Keyword::END,
-    Keyword::EXCEPT,
-    Keyword::FALSE,
-    Keyword::FETCH,
-    Keyword::FOR,
-    Keyword::FOREIGN,
-    Keyword::FREEZE,
-    Keyword::FROM,
-    Keyword::FULL,
-    Keyword::GRANT,
-    Keyword::GROUP,
-    Keyword::HAVING,
-    Keyword::ILIKE,
-    Keyword::IN,
-    Keyword::INITIALLY,
-    Keyword::INNER,
-    Keyword::INTERSECT,
-    Keyword::INTO,
-    Keyword::IS,
-    Keyword::ISNULL,
-    Keyword::JOIN,
-    Keyword::LATERAL,
-    Keyword::LEADING,
-    Keyword::LEFT,
-    Keyword::LIKE,
-    Keyword::LIMIT,
-    // Keyword::LOCALTIME,
-    // Keyword::LOCALTIMESTAMP,
-    Keyword::NATURAL,
-    Keyword::NOT,
-    Keyword::NOTNULL,
-    Keyword::NULL,
-    Keyword::OFFSET,
-    Keyword::ON,
-    Keyword::ONLY,
-    Keyword::OR,
-    Keyword::ORDER,
-    Keyword::OUTER,
-    Keyword::OVERLAPS,
-    Keyword::PLACING,
-    Keyword::PRIMARY,
-    Keyword::REFERENCES,
-    Keyword::RETURNING,
-    Keyword::RIGHT,
-    // Keyword::SELECT,
-    // Keyword::SESSION_USER,
-    Keyword::SIMILAR,
-    Keyword::SOME,
-    Keyword::SYMMETRIC,
-    Keyword::TABLE,
-    Keyword::TABLESAMPLE,
-    Keyword::THEN,
-    Keyword::TO,
-    Keyword::TRAILING,
-    Keyword::TRUE,
-    Keyword::UNION,
-    Keyword::UNIQUE,
-    // Keyword::USER,
-    Keyword::USING,
-    Keyword::VARIADIC,
-    Keyword::VERBOSE,
-    Keyword::WHEN,
-    Keyword::WHERE,
-    Keyword::WINDOW,
-    // Keyword::WITH,
-];
-
-impl fmt::Display for Keyword {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+    #[test]
+    fn test_keywords() {
+        Keyword::parse_select(&mut "SELECT").unwrap();
     }
 }
